@@ -193,7 +193,7 @@ public class RobotRace extends Base {
         terrain.draw();
         
         // Unit box around origin.
-        glut.glutWireCube(1f);
+        //glut.glutWireCube(1f);
 
         // Move in x-direction.
         gl.glTranslatef(2f, 0f, 0f);
@@ -214,7 +214,73 @@ public class RobotRace extends Base {
      * and origin (yellow).
      */
     public void drawAxisFrame() {
-        // code goes here ...
+        // Set the size of the cube to 1m
+        float cubeSize = 1f;
+
+        // Set the radius of the sphere
+        float sphereRadius = 0.2f * cubeSize;
+        
+        // Set the base and height of the cones
+        float coneBase = 0.1f * cubeSize;
+        float coneHeight = 0.5f * cubeSize;
+        
+        // Draw the axis cube (from (0, 0, 0) to (1, 1, 1))
+        // Since the center of the cube will be (0.5, 0.5, 0.5), we need to
+        // translate the cube a bit
+        gl.glTranslatef(0.5f, 0.5f, 0.5f);
+        // Draw the cube
+        glut.glutWireCube(cubeSize);
+        // Undo the translation
+        gl.glTranslatef(-0.5f * cubeSize, -0.5f * cubeSize, -0.5f * cubeSize);
+        
+        // Draw the yellow sphere at (0, 0, 0)
+        // First, set the color of the sphere
+        gl.glColor3f(1f, 1f, 0f);
+        // Then, draw the sphere
+        glut.glutSolidSphere(sphereRadius, 20, 20);
+        // Reset the color to black
+        gl.glColor3f(0f, 0f, 0f);
+        
+        // Draw the red cone at (1, 0, 0)
+        // Set the color for the x-axis cone (red)
+        gl.glColor3f(1f, 0f, 0f);
+        // Translate to (1, 0, 0)
+        gl.glTranslatef(1f * cubeSize, 0f, 0f);
+        // Now rotate over the y-axis
+        gl.glRotatef(90f, 0f, 1f, 0f);
+        // Draw the cone
+        glut.glutSolidCone(coneBase, coneHeight, 20, 20);
+        // Undo the rotation
+        gl.glRotatef(-90f, 0f, 1f, 0f);
+        // Undo the translation
+        gl.glTranslatef(-1f * cubeSize, 0f, 0f);
+        
+        // Draw the green cone at (0, 1, 0)
+        // Set the color for the y-axis cone (green)
+        gl.glColor3f(0f, 1f, 0f);
+        // Translate to (0, 1, 0)
+        gl.glTranslatef(0f, 1f * cubeSize, 0f);
+        // Now rotate over the x-axis
+        gl.glRotatef(-90f, 1f, 0f, 0f);
+        // Draw the cone
+        glut.glutSolidCone(coneBase, coneHeight, 20, 20);
+        // Undo the rotation
+        gl.glRotatef(90f, 1f, 0f, 0f);
+        // Undo the translation
+        gl.glTranslatef(0f, -1f * cubeSize, 0f);
+        
+        // Draw the blue cone at (0, 0, 1)
+        // Set the color for the z-axis cone (blue)
+        gl.glColor3f(0f, 0f, 1f);
+        // Translate to (0, 0, 1)
+        gl.glTranslatef(0f, 0f, 1f * cubeSize);
+        // Draw the cone
+        glut.glutSolidCone(coneBase, coneHeight, 20, 20);
+        // Undo the translation
+        gl.glTranslatef(0f, 0f, -1f * cubeSize);
+        
+        // Reset the color
+        gl.glColor3f(0f, 0f, 0f);
     }
     
     /**
