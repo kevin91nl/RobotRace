@@ -241,6 +241,14 @@ public class RobotRace extends Base {
         // Reset the color to black
         gl.glColor3f(0f, 0f, 0f);
         
+        // The cones need first to be rotated when they are at the origin.
+        // After the rotation, a translation is needed. So let V be the
+        // coordinate vector. Let R be the rotation matrix and T be the translation
+        // matrix. Then the transformed coordinates V' after the rotation
+        // are V' = RV. The transformed coordinates V'' after the translation
+        // are thus V'' = TV' = TRV. So, first the translation matrix need
+        // to be applied and after that the rotation vector must be applied.
+        
         // Draw the red cone at (1, 0, 0)
         // Set the color for the x-axis cone (red)
         gl.glColor3f(1f, 0f, 0f);
