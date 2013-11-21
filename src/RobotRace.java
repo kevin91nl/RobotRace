@@ -130,6 +130,10 @@ public class RobotRace extends Base {
         gl.glEnable(GL_TEXTURE_2D);
         gl.glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
         gl.glBindTexture(GL_TEXTURE_2D, 0);
+        
+        // Set viewing properties.
+        gs.theta = 0.5f * 0.5f * (float)Math.PI;
+        gs.phi = 0.5f * 0.5f * (float)Math.PI;
     }
     
     /**
@@ -137,6 +141,39 @@ public class RobotRace extends Base {
      */
     @Override
     public void setView() {
+        //
+        // Define C as center point (given by gs.cnt).
+        // Let E be the eye point and V=E-C (a vector from C to E).
+        // Then E=C+V.
+        //
+        // Given: |V| (gs.vDist), φ (gs.phi), θ (gs.theta) with:
+        //    |V|:  Lenth of vector V.
+        //    φ:    Angle between positive X-axis and V projected on the XY-plane.
+        //    θ:    Angle between V and V projected on the XY-plane.
+        //
+        // Now we can calculate V = (x, y, z):
+        //    z = |V| * sin(φ)
+        //    
+        // Let V' be V projected on the XY-plane. Then:
+        //    |V'| = |V| * cos(φ)
+        //
+        // From this we get:
+        //     x = |V'| * cos(θ)
+        //     y = |V'| * sin(θ)
+        //
+        // Thus:
+        //     V = (x, y, z) = (|V|cos(θ)cos(φ), |V|sin(θ)cos(φ), |V|sin(φ))
+        
+        Vector V = new Vector(
+            gs.vDist * Math.cos(gs.theta) * Math.cos(gs.phi),
+            gs.vDist * Math.sin(gs.theta) * Math.cos(gs.phi),
+            gs.vDist * Math.sin(gs.phi)
+        );
+        
+        // Thus, eye point E = C + V
+        camera.eye = gs.cnt.add(V);
+        camera.center = gs.cnt;
+        
         // Select part of window.
         gl.glViewport(0, 0, gs.w, gs.h);
         
@@ -146,7 +183,7 @@ public class RobotRace extends Base {
 
         // Set the perspective.
         // Modify this to meet the requirements in the assignment.
-        glu.gluPerspective(40, (float)gs.w / (float)gs.h, 0.1, 100);
+        glu.gluPerspective(40, (float)gs.w / (float)gs.h, 0.1 * gs.vDist, 10 * gs.vDist);
         
         // Set camera.
         gl.glMatrixMode(GL_MODELVIEW);
@@ -182,6 +219,47 @@ public class RobotRace extends Base {
         if (gs.showAxes) {
             drawAxisFrame();
         }
+        
+        //
+        // Draw a horizontal line through the center point with width gs.vWidth and through
+        // center point C, parallel with the XY-plane and perpendicular on the view
+        // direction.
+        //
+        // So, the line can be represented as L(t) := C + t*W with W as vector
+        // such that W perpendicular on V (=E-C) and in the XY-plane. If it is
+        // in the XY-plane, it is perpendicular on the Z-axis. So, it is for
+        // example perpendicular with (0, 0, 1).
+        // Beware that V can be in the same direction as (0, 0, 1)! In that case,
+        // we approach (0, 0, 1) by (0, 0, 0.999...).
+        //
+        Vector V = camera.eye.add(gs.cnt.scale(-1));
+        Vector W;
+        if (V.x() == 0 && V.y() == 0) {
+            // Same direction! Use an approach for (0, 0, 1).
+            W = V.cross(new Vector(0f, 0f, 0.99999f));
+        } else {
+            W = V.cross(new Vector(0f, 0f, 1f));
+        }
+        Vector C = gs.cnt;
+        
+        // Let F and G be the begin point and end point respectively of the line
+        // segment.
+        // So we need to find a parameter t such that:
+        // F = C - tW
+        // G = C + tW
+        // And |F-G| = gs.vWidth.
+        // F-G=-tW-tW=-2tW
+        // So gs.vWidth = |-2tW| = 2|t||W| and therefor |t|=gs.vWidth/(2|W|).
+        double t = gs.vWidth / (2 * W.length());
+        Vector F = C.add(W.scale(-t));
+        Vector G = C.add(W.scale(t));
+        
+        gl.glLineWidth(1.2f);
+        gl.glBegin(GL_LINES);
+        gl.glVertex3d(F.x(), F.y(), F.z());
+        gl.glVertex3d(G.x(), G.y(), G.z());
+        gl.glEnd();
+        gl.glLineWidth(1);
         
         // Draw the first robot
         robots[0].draw(false);
