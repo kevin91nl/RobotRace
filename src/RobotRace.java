@@ -130,6 +130,23 @@ public class RobotRace extends Base {
         gl.glEnable(GL_TEXTURE_2D);
         gl.glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
         gl.glBindTexture(GL_TEXTURE_2D, 0);
+				
+				// Enable shading and lighting
+				gl.glEnable(GL_LIGHTING);
+				gl.glShadeModel(GL_SMOOTH);
+				gl.glEnable(GL_COLOR_MATERIAL);
+				
+				// Set up ambient lightning far away
+				float[] ambientColor = {0.3f, 0.3f, 0.3f, 0.001f};
+				float[] ambientPosition = {10000f, 10000f, 10000f};
+				gl.glLightfv(GL_LIGHT0, GL_AMBIENT, ambientColor, 0);
+				gl.glLightfv(GL_LIGHT0, GL_POSITION, ambientPosition, 0);
+				gl.glEnable(GL_LIGHT0);
+				
+				// Set up light spot (and reposition at camera movement)
+				float[] cameralightColor = {1f, 0f, 0f, 1.0f};
+				gl.glLightfv(GL_LIGHT1, GL_AMBIENT, cameralightColor, 0);
+				gl.glEnable(GL_LIGHT1);
         
         // Set viewing properties.
         gs.theta = 0.5f * 0.5f * (float)Math.PI;
@@ -173,6 +190,30 @@ public class RobotRace extends Base {
         // Thus, eye point E = C + V
         camera.eye = gs.cnt.add(V);
         camera.center = gs.cnt;
+				
+				// Reposition the light at the left-top camera position.
+				// We need to move the camera to the left.
+				// This can be done by calculating (0, 0, 1) x (C - E) (which is "left").
+				// Then, "up" is (0, 0, 1).
+				Vector Vleft = new Vector(0, 0, 1).cross(camera.center.subtract(camera.eye)).normalized();
+				Vector Vup = new Vector(0, 0, 1);
+				
+				// Calculate the light position and convert to float array.
+				Vector cameralightPosition = camera.eye;
+				cameralightPosition = cameralightPosition.add(Vleft.scale(2)).add(Vup.scale(2));
+				float[] fCameralightPosition = {
+					(float)cameralightPosition.x(),
+					(float)cameralightPosition.y(),
+					(float)cameralightPosition.z()
+				};
+				float[] fCameralightDirection = {
+					(float)camera.center.x(),
+					(float)camera.center.y(),
+					(float)camera.center.z()
+				};
+				gl.glLightfv(GL_LIGHT1, GL_POSITION, fCameralightPosition, 0);
+				gl.glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 95f);
+				gl.glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, fCameralightDirection, 0);
         
         // Select part of window.
         gl.glViewport(0, 0, gs.w, gs.h);
@@ -261,8 +302,16 @@ public class RobotRace extends Base {
         gl.glEnd();
         gl.glLineWidth(1);
         
-        // Draw the first robot
+        // Draw the robots
+				gl.glPushMatrix();
         robots[0].draw(false);
+				gl.glTranslatef(1f, 0f, 0f);
+				robots[1].draw(false);
+				gl.glTranslatef(1f, 0f, 0f);
+				robots[2].draw(false);
+				gl.glTranslatef(1f, 0f, 0f);
+				robots[3].draw(false);
+				gl.glPopMatrix();
         
         // Draw race track
         raceTrack.draw(gs.trackNr);
@@ -425,6 +474,25 @@ public class RobotRace extends Base {
      * Represents a Robot, to be implemented according to the Assignments.
      */
     private class Robot {
+			
+				public double angleLUpperArm = 180.0;
+				public double angleLLowerArm = -0.0;
+				public double angleLHand = 0.0;
+				
+				public double angleRUpperArm = 180.0;
+				public double angleRLowerArm = -0.0;
+				public double angleRHand = -0.0;
+				
+				public double angleLUpperLeg = 0.0;
+				public double angleLLowerLeg = 0.0;
+				public double angleLFoot = 0.0;
+				
+				public double angleRUpperLeg = 0.0;
+				public double angleRLowerLeg = 0.0;
+				public double angleRFoot = 0.0;
+				
+				public double angleHead = 0;
+				public double angleNeck = 0;
         
         /** The material from which this robot is built. */
         private final Material material;
@@ -443,8 +511,184 @@ public class RobotRace extends Base {
          * Draws this robot (as a {@code stickfigure} if specified).
          */
         public void draw(boolean stickFigure) {
-            // code goes here ...
+					// Left arm
+					gl.glTranslatef(-0.3f, 0f, 1.5f);
+					this.drawArm(stickFigure, this.angleLUpperArm, this.angleLLowerArm, this.angleLHand);
+					gl.glTranslatef(0.3f, 0f, -1.5f);
+					
+					// Right arm
+					gl.glTranslatef(0.3f, 0f, 1.5f);
+					this.drawArm(stickFigure, this.angleRUpperArm, this.angleRLowerArm, this.angleRHand);
+					gl.glTranslatef(-0.3f, 0f, -1.5f);
+					
+					// Left leg
+					gl.glTranslatef(-0.2f, 0f, 0.8f);
+					this.drawLeg(stickFigure, this.angleLUpperLeg, this.angleLLowerLeg, this.angleLFoot);
+					gl.glTranslatef(0.2f, 0f, -0.8f);
+					
+					// Right leg
+					gl.glTranslatef(0.2f, 0f, 0.8f);
+					this.drawLeg(stickFigure, this.angleRUpperLeg, this.angleRLowerLeg, this.angleRFoot);
+					gl.glTranslatef(-0.2f, 0f, -0.8f);
+					
+					// Head
+					gl.glTranslatef(0f, 0f, 1.5f);
+					this.drawHead(stickFigure);
+					gl.glTranslatef(0f, 0f, -1.5f);
+					
+					// Torso
+					gl.glTranslatef(0f, 0f, 0.8f);
+					this.drawTorso(stickFigure);
+					gl.glTranslatef(0f, 0f, -0.8f);
         }
+				
+				public void drawHead(boolean stickFigure) {
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the neck
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0f, 0.1f);
+
+						// Draw the head
+						gl.glVertex3f(0f, 0f, 0.1f);
+						gl.glVertex3f(0f, 0f, 0.5f);
+						gl.glEnd();
+					} else {
+						// Neck
+						glut.glutSolidCylinder(0.05f, 0.1f + 0.15f / 2.0f, 20, 20);
+						
+						// Head
+						gl.glTranslatef(0f, 0f, 0.1f + 0.15f);
+						glut.glutSolidSphere(0.15f, 20, 20);
+						gl.glTranslatef(0f, 0f, -0.1f - 0.15f);
+					}
+				}
+				
+				public void drawTorso(boolean stickFigure) {
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the back
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0f, 0.7f);
+
+						// Draw the shoulders
+						gl.glVertex3f(-0.3f, 0f, 0.7f);
+						gl.glVertex3f(0.3f, 0f, 0.7f);
+
+						// Draw the hips
+						gl.glVertex3f(-0.2f, 0f, 0.0f);
+						gl.glVertex3f(0.2f, 0f, 0.0f);
+						gl.glEnd();
+					} else {
+						gl.glTranslatef(0f, 0f, 0.7f / 2f);
+						gl.glScalef(0.6f, 0.2f, 0.7f);
+						glut.glutSolidCube(1.0f);
+						gl.glScalef(1f / 0.6f, 1f / 0.2f, 1f / 0.7f);
+						gl.glTranslatef(0f, 0f, -0.7f / 2f);
+					}
+				}
+				
+				public void drawLeg(boolean stickFigure, double angleUpperLeg, double angleLowerLeg, double angleFoot) {
+					// Upper leg rotation
+					gl.glRotatef((float)angleUpperLeg, 1f, 0f, 0f);
+					
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the upper leg
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0f, -0.4f);
+						gl.glEnd();
+					} else {
+						// Draw the upper leg
+						glut.glutSolidCylinder(0.08f, -0.4f, 20, 20);
+					}
+					
+					gl.glTranslatef(0f, 0f, -0.4f);
+					gl.glRotatef((float)angleLowerLeg, 1f, 0f, 0f);
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the lower leg
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0f, -0.4f);
+						gl.glEnd();
+					} else {
+						// Draw lower leg
+						glut.glutSolidCylinder(0.08f, -0.4f, 20, 20);
+					}
+					
+					gl.glTranslatef(0f, 0f, -0.4f);
+					gl.glRotatef((float)angleFoot, 1f, 0f, 0f);
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the foot
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0f, 0.1f);
+						gl.glEnd();
+					} else {
+						glut.glutSolidCylinder(0.08f, 0.1f, 20, 20);
+					}
+					
+					// Undo all transformations
+					gl.glRotatef(-(float)angleFoot, 1f, 0f, 0f);
+					gl.glTranslatef(0f, 0f, 0.4f);
+					
+					gl.glRotatef(-(float)angleLowerLeg, 1f, 0f, 0f);
+					gl.glTranslatef(0f, 0f, 0.4f);
+					
+					gl.glRotatef(-(float)angleUpperLeg, 1f, 0f, 0f);
+				}
+				
+				public void drawArm(boolean stickFigure, double angleUpperArm, double angleLowerArm, double angleHand) {
+					// Upper arm rotation
+					gl.glRotatef((float)angleUpperArm, 1f, 0f, 0f);
+					
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the upper arm
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0f, -0.4f);
+						gl.glEnd();
+					} else {
+						// Draw upper arm
+						glut.glutSolidCylinder(0.08f, -0.4f, 20, 20);
+					}
+					
+					// Lower arm translation and then rotation
+					gl.glTranslatef(0f, 0f, -0.4f);
+					gl.glRotatef((float)angleLowerArm, 1f, 0f, 0f);
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the lower arm
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0f, -0.4f);
+						gl.glEnd();
+					} else {
+						// Draw lower arm
+						glut.glutSolidCylinder(0.08f, -0.4f, 20, 20);
+					}
+					
+					// Hand translation and then rotation
+					gl.glTranslatef(0f, 0f, -0.4f);
+					gl.glRotatef((float)angleHand, 1f, 0f, 0f);
+					if (stickFigure) {
+						gl.glBegin(GL_LINES);
+						// Draw the hand
+						gl.glVertex3f(0f, 0f, 0f);
+						gl.glVertex3f(0f, 0.1f, 0f);
+						gl.glEnd();
+					} else {
+						glut.glutSolidCylinder(0.08f, 0.1f, 20, 20);
+					}
+					
+					// Undo all transformations
+					gl.glRotatef(-(float)angleHand, 1f, 0f, 0f);
+					gl.glTranslatef(0f, 0f, 0.4f);
+					
+					gl.glRotatef(-(float)angleLowerArm, 1f, 0f, 0f);
+					gl.glTranslatef(0f, 0f, 0.4f);
+					
+					gl.glRotatef(-(float)angleUpperArm, 1f, 0f, 0f);
+				}
     }
     
     /**
