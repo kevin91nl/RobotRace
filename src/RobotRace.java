@@ -70,6 +70,23 @@ public class RobotRace extends Base {
     
     /** Instance of the terrain. */
     private final Terrain terrain;
+		
+		/*========================================================================*/
+		// GLOBAL METHODS
+		/*========================================================================*/
+		/**
+		 * Set the material.
+		 * 
+		 * @param material 
+		 */
+		public void applyMaterial(Material material) {
+			gl.glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, material.diffuse, 0);
+			gl.glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, material.specular, 0);
+		}
+		
+		/*========================================================================*/
+		// END GLOBAL METHODS
+		/*========================================================================*/
     
     /**
      * Constructs this robot race by initializing robots,
@@ -137,16 +154,9 @@ public class RobotRace extends Base {
 				gl.glEnable(GL_COLOR_MATERIAL);
 				
 				// Set up ambient lightning far away
-				float[] ambientColor = {0.3f, 0.3f, 0.3f, 0.001f};
-				float[] ambientPosition = {10000f, 10000f, 10000f};
-				gl.glLightfv(GL_LIGHT0, GL_AMBIENT, ambientColor, 0);
-				gl.glLightfv(GL_LIGHT0, GL_POSITION, ambientPosition, 0);
-				gl.glEnable(GL_LIGHT0);
-				
-				// Set up light spot (and reposition at camera movement)
-				float[] cameralightColor = {1f, 0f, 0f, 1.0f};
-				gl.glLightfv(GL_LIGHT1, GL_AMBIENT, cameralightColor, 0);
-				gl.glEnable(GL_LIGHT1);
+				gl.glTranslatef(5f, 5f, 7f);
+				glut.glutSolidSphere(0.1, 30, 30);
+				gl.glTranslatef(-5f, -5f, -7f);
         
         // Set viewing properties.
         gs.theta = 0.5f * 0.5f * (float)Math.PI;
@@ -190,30 +200,6 @@ public class RobotRace extends Base {
         // Thus, eye point E = C + V
         camera.eye = gs.cnt.add(V);
         camera.center = gs.cnt;
-				
-				// Reposition the light at the left-top camera position.
-				// We need to move the camera to the left.
-				// This can be done by calculating (0, 0, 1) x (C - E) (which is "left").
-				// Then, "up" is (0, 0, 1).
-				Vector Vleft = new Vector(0, 0, 1).cross(camera.center.subtract(camera.eye)).normalized();
-				Vector Vup = new Vector(0, 0, 1);
-				
-				// Calculate the light position and convert to float array.
-				Vector cameralightPosition = camera.eye;
-				cameralightPosition = cameralightPosition.add(Vleft.scale(2)).add(Vup.scale(2));
-				float[] fCameralightPosition = {
-					(float)cameralightPosition.x(),
-					(float)cameralightPosition.y(),
-					(float)cameralightPosition.z()
-				};
-				float[] fCameralightDirection = {
-					(float)camera.center.x(),
-					(float)camera.center.y(),
-					(float)camera.center.z()
-				};
-				gl.glLightfv(GL_LIGHT1, GL_POSITION, fCameralightPosition, 0);
-				gl.glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 95f);
-				gl.glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, fCameralightDirection, 0);
         
         // Select part of window.
         gl.glViewport(0, 0, gs.w, gs.h);
@@ -260,6 +246,49 @@ public class RobotRace extends Base {
         if (gs.showAxes) {
             drawAxisFrame();
         }
+				
+				// Draw the ambient lighting
+				float[] ambientColor = {0.3f, 0.3f, 0.3f, 1f};
+				float[] ambientPosition = {5f, 5f, 7f, 1f};
+				//gl.glLightfv(GL_LIGHT0, GL_AMBIENT, ambientColor, 0);
+				gl.glLightfv(GL_LIGHT0, GL_POSITION, ambientPosition, 0);
+				gl.glEnable(GL_LIGHT0);
+				
+				// Reposition the light at the left-top camera position.
+				// We need to move the camera to the left.
+				// This can be done by calculating (0, 0, 1) x (C - E) (which is "left").
+				// Then, "up" is (0, 0, 1).
+				Vector Vup = new Vector(0, 0, 1);
+				Vector Vleft = Vup.cross(camera.center.subtract(camera.eye)).normalized();
+				
+				// Calculate the light position and convert to float array.
+				// Light position = E + Vleft + Vup.
+				Vector cameralightPosition = camera.eye.add(Vleft.scale(0.1)).add(Vup.scale(0.1));
+				float[] fCameralightPosition = {
+					(float)cameralightPosition.x(),
+					(float)cameralightPosition.y(),
+					(float)cameralightPosition.z()
+				};
+				
+				// Calculate the light direction. This is simply C - E.
+				float[] fCameralightDirection = {
+					(float)camera.center.subtract(camera.eye).scale(50).x(),
+					(float)camera.center.subtract(camera.eye).scale(50).y(),
+					(float)camera.center.subtract(camera.eye).scale(50).z(),
+					1f
+				};
+				
+				// Now create a spotlight which starts at the camera light position
+				// and goes in the direction of C - E with an angle of 60 degrees.
+				float[] lightSpecular = {0.6f, 0.6f, 0.6f, 0.6f};
+				float[] lightDiffuse = {1f, 1f, 1f, 0.5f};
+				gl.glLightfv(GL_LIGHT1, GL_SPECULAR, lightSpecular, 0);
+				gl.glLightfv(GL_LIGHT1, GL_DIFFUSE, lightDiffuse, 0);
+				gl.glLightfv(GL_LIGHT1, GL_POSITION, fCameralightPosition, 0);
+				gl.glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 60f);
+				gl.glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 100f);
+				gl.glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, fCameralightDirection, 0);
+				gl.glEnable(GL_LIGHT1);
         
         //
         // Draw a horizontal line through the center point with width gs.vWidth and through
@@ -301,6 +330,14 @@ public class RobotRace extends Base {
         gl.glVertex3d(G.x(), G.y(), G.z());
         gl.glEnd();
         gl.glLineWidth(1);
+				
+				// This is an orange sphere in the origin for shadow testing purposes
+				/*
+				applyMaterial(Material.ORANGE);
+				glut.glutSolidSphere(0.5, 30, 30);
+				applyMaterial(Material.BLACK);
+				glut.glutWireSphere(0.51, 30, 30);
+				* */
         
         // Draw the robots
 				gl.glPushMatrix();
@@ -318,21 +355,6 @@ public class RobotRace extends Base {
         
         // Draw terrain
         terrain.draw();
-        
-        // Unit box around origin.
-        //glut.glutWireCube(1f);
-
-        // Move in x-direction.
-        gl.glTranslatef(2f, 0f, 0f);
-        
-        // Rotate 30 degrees, around z-axis.
-        gl.glRotatef(30f, 0f, 0f, 1f);
-        
-        // Scale in z-direction.
-        gl.glScalef(1f, 1f, 2f);
-
-        // Translated, rotated, scaled box.
-        glut.glutWireCube(1f);
     }
     
     
@@ -422,30 +444,37 @@ public class RobotRace extends Base {
      * Materials that can be used for the robots.
      */
     public enum Material {
+			
+				/**
+				 * Black material for testing purposes.
+				 */
+				BLACK (
+            new float[] {0f, 0f, 0f, 0f},
+            new float[] {0f, 0f, 0f, 0f}),
         
         /** 
          * Gold material properties.
          * Modify the default values to make it look like gold.
          */
         GOLD (
-            new float[] {0.8f, 0.8f, 0.8f, 1.0f},
-            new float[] {0.0f, 0.0f, 0.0f, 1.0f}),
+            new float[] {0.75164f, 0.60648f, 0.22648f, 1.0f},
+            new float[] {0.628281f, 0.555802f, 0.366065f, 1.0f}),
         
         /**
          * Silver material properties.
          * Modify the default values to make it look like silver.
          */
         SILVER (
-            new float[] {0.8f, 0.8f, 0.8f, 1.0f},
-            new float[] {0.0f, 0.0f, 0.0f, 1.0f}),
+            new float[] {0.50754f, 0.50754f, 0.50754f, 1.0f},
+            new float[] {0.508273f, 0.508273f, 0.508273f, 1.0f}),
         
         /** 
          * Wood material properties.
          * Modify the default values to make it look like wood.
          */
         WOOD (
-            new float[] {0.8f, 0.8f, 0.8f, 1.0f},
-            new float[] {0.0f, 0.0f, 0.0f, 1.0f}),
+            new float[] {0.1f, 0.1f, 0.1f, 1.0f},
+            new float[] {0.3f, 0.1f, 0.1f, 1.0f}),
         
         /**
          * Orange material properties.
@@ -453,13 +482,13 @@ public class RobotRace extends Base {
          */
         ORANGE (
             new float[] {0.8f, 0.8f, 0.8f, 1.0f},
-            new float[] {0.0f, 0.0f, 0.0f, 1.0f});
+            new float[] {1f, 0.6f, 0.0f, 1.0f});
         
         /** The diffuse RGBA reflectance of the material. */
-        float[] diffuse;
+        public float[] diffuse;
         
         /** The specular RGBA reflectance of the material. */
-        float[] specular;
+        public float[] specular;
         
         /**
          * Constructs a new material with diffuse and specular properties.
@@ -503,14 +532,14 @@ public class RobotRace extends Base {
         public Robot(Material material
             /* add other parameters that characterize this robot */) {
             this.material = material;
-            
-            // code goes here ...
         }
         
         /**
          * Draws this robot (as a {@code stickfigure} if specified).
          */
         public void draw(boolean stickFigure) {
+					applyMaterial(this.material);
+					
 					// Left arm
 					gl.glTranslatef(-0.3f, 0f, 1.5f);
 					this.drawArm(stickFigure, this.angleLUpperArm, this.angleLLowerArm, this.angleLHand);
