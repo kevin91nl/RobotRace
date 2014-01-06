@@ -1,4 +1,3 @@
-
 import javax.media.opengl.GL;
 import static javax.media.opengl.GL2.*;
 import robotrace.Base;
@@ -82,6 +81,8 @@ public class RobotRace extends Base {
 		public void applyMaterial(Material material) {
 			gl.glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, material.diffuse, 0);
 			gl.glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, material.specular, 0);
+            gl.glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, material.ambient, 0);
+            gl.glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, material.shininess);
 		}
 		
 		/*========================================================================*/
@@ -134,8 +135,6 @@ public class RobotRace extends Base {
         gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         
         // Enable anti-aliasing.
-        gl.glEnable(GL_LINE_SMOOTH);
-        gl.glEnable(GL_POLYGON_SMOOTH);
         gl.glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
         gl.glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
         
@@ -147,20 +146,82 @@ public class RobotRace extends Base {
         gl.glEnable(GL_TEXTURE_2D);
         gl.glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
         gl.glBindTexture(GL_TEXTURE_2D, 0);
-				
-				// Enable shading and lighting
-				gl.glEnable(GL_LIGHTING);
-				gl.glShadeModel(GL_SMOOTH);
-				gl.glEnable(GL_COLOR_MATERIAL);
-				
-				// Set up ambient lightning far away
-				gl.glTranslatef(5f, 5f, 7f);
-				glut.glutSolidSphere(0.1, 30, 30);
-				gl.glTranslatef(-5f, -5f, -7f);
         
         // Set viewing properties.
         gs.theta = 0.5f * 0.5f * (float)Math.PI;
         gs.phi = 0.5f * 0.5f * (float)Math.PI;
+
+        // Setup the lighting
+        initializeLighting();
+    }
+
+    /**
+     * Initialize the lighting.
+     */
+    public void initializeLighting() {
+        // Enable shading and lighting
+        float[] ambientColor = {0.5f, 0.5f, 0.5f, 1f};
+        gl.glEnable(GL_LIGHTING);
+        gl.glShadeModel(GL_SMOOTH);
+        gl.glEnable(GL_COLOR_MATERIAL);
+        gl.glEnable(GL_NORMALIZE);
+        gl.glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientColor, 0);
+    }
+
+    /**
+     * Create lights.
+     */
+    public void createLights() {
+        // Draw the ambient lighting
+        float[] ambientColor = {1f, 1f, 1f, 1f};
+        float[] ambientPosition = {0f, 0f, 0f, 1f};
+        float[] ambientDiffuse = {1f, 1f, 1f, 1f};
+        float[] ambientSpecular = {1f, 1f, 1f, 1f};
+        gl.glBegin(GL_LINES);
+        gl.glVertex3d(camera.eye.x() + 1, camera.eye.y() + 1, camera.eye.z());
+        gl.glVertex3d(camera.center.x(), camera.center.y(), camera.center.z());
+        gl.glEnd();
+        //gl.glLightfv(GL_LIGHT0, GL_AMBIENT, ambientColor, 0);
+        gl.glLightfv(GL_LIGHT0, GL_POSITION, ambientPosition, 0);
+        //gl.glLightfv(GL_LIGHT0, GL_DIFFUSE, ambientDiffuse, 0);
+        //gl.glLightfv(GL_LIGHT0, GL_SPECULAR, ambientSpecular, 0);
+        gl.glEnable(GL_LIGHT0);
+
+        // Reposition the light at the left-top camera position.
+        // We need to move the camera to the left.
+        // This can be done by calculating (0, 0, 1) x (C - E) (which is "left").
+        // Then, "up" is (0, 0, 1).
+        Vector Vup = new Vector(0, 0, 1);
+        Vector Vleft = Vup.cross(camera.center.subtract(camera.eye)).normalized();
+        
+        // Calculate the light position and convert to float array.
+        // Light position = E + Vleft + Vup.
+        Vector cameralightPosition = camera.eye.add(Vleft.scale(0.1)).add(Vup.scale(0.1));
+        float[] fCameralightPosition = {
+            (float)cameralightPosition.x(),
+            (float)cameralightPosition.y(),
+            (float)cameralightPosition.z()
+        };
+        
+        // Calculate the light direction. This is simply C - E.
+        float[] fCameralightDirection = {
+            (float)camera.center.subtract(camera.eye).scale(50).x(),
+            (float)camera.center.subtract(camera.eye).scale(50).y(),
+            (float)camera.center.subtract(camera.eye).scale(50).z(),
+            1f
+        };
+        
+        // Now create a spotlight which starts at the camera light position
+        // and goes in the direction of C - E with an angle of 60 degrees.
+        float[] lightSpecular = {1f, 1f, 1f, 1f};
+        float[] lightDiffuse = {1f, 1f, 1f, 0.5f};
+        gl.glLightfv(GL_LIGHT1, GL_SPECULAR, lightSpecular, 0);
+        gl.glLightfv(GL_LIGHT1, GL_DIFFUSE, lightDiffuse, 0);
+        gl.glLightfv(GL_LIGHT1, GL_POSITION, fCameralightPosition, 0);
+        gl.glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 60f);
+        gl.glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 100f);
+        gl.glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, fCameralightDirection, 0);
+        gl.glEnable(GL_LIGHT1);
     }
     
     /**
@@ -168,39 +229,6 @@ public class RobotRace extends Base {
      */
     @Override
     public void setView() {
-        //
-        // Define C as center point (given by gs.cnt).
-        // Let E be the eye point and V=E-C (a vector from C to E).
-        // Then E=C+V.
-        //
-        // Given: |V| (gs.vDist), φ (gs.phi), θ (gs.theta) with:
-        //    |V|:  Lenth of vector V.
-        //    φ:    Angle between positive X-axis and V projected on the XY-plane.
-        //    θ:    Angle between V and V projected on the XY-plane.
-        //
-        // Now we can calculate V = (x, y, z):
-        //    z = |V| * sin(φ)
-        //    
-        // Let V' be V projected on the XY-plane. Then:
-        //    |V'| = |V| * cos(φ)
-        //
-        // From this we get:
-        //     x = |V'| * cos(θ)
-        //     y = |V'| * sin(θ)
-        //
-        // Thus:
-        //     V = (x, y, z) = (|V|cos(θ)cos(φ), |V|sin(θ)cos(φ), |V|sin(φ))
-        
-        Vector V = new Vector(
-            gs.vDist * Math.cos(gs.theta) * Math.cos(gs.phi),
-            gs.vDist * Math.sin(gs.theta) * Math.cos(gs.phi),
-            gs.vDist * Math.sin(gs.phi)
-        );
-        
-        // Thus, eye point E = C + V
-        camera.eye = gs.cnt.add(V);
-        camera.center = gs.cnt;
-        
         // Select part of window.
         gl.glViewport(0, 0, gs.w, gs.h);
         
@@ -210,6 +238,10 @@ public class RobotRace extends Base {
 
         // Set the perspective.
         // Modify this to meet the requirements in the assignment.
+        // Let alpha be the viewing angle.
+        // Then tan(1/2 alpha) = 1/2 * viewWidth / viewDistance
+        // So alpha = 2 * arcTan(viewWidth / (2 * viewDistance))
+        float alpha = 2f * (float)Math.atan(gs.vWidth / (2 * gs.vDist));
         glu.gluPerspective(40, (float)gs.w / (float)gs.h, 0.1 * gs.vDist, 10 * gs.vDist);
         
         // Set camera.
@@ -221,6 +253,9 @@ public class RobotRace extends Base {
         glu.gluLookAt(camera.eye.x(),    camera.eye.y(),    camera.eye.z(),
                       camera.center.x(), camera.center.y(), camera.center.z(),
                       camera.up.x(),     camera.up.y(),     camera.up.z());
+
+        // Create the lights before doing anything else
+        createLights();
     }
     
     /**
@@ -246,49 +281,6 @@ public class RobotRace extends Base {
         if (gs.showAxes) {
             drawAxisFrame();
         }
-				
-				// Draw the ambient lighting
-				float[] ambientColor = {0.3f, 0.3f, 0.3f, 1f};
-				float[] ambientPosition = {5f, 5f, 7f, 1f};
-				//gl.glLightfv(GL_LIGHT0, GL_AMBIENT, ambientColor, 0);
-				gl.glLightfv(GL_LIGHT0, GL_POSITION, ambientPosition, 0);
-				gl.glEnable(GL_LIGHT0);
-				
-				// Reposition the light at the left-top camera position.
-				// We need to move the camera to the left.
-				// This can be done by calculating (0, 0, 1) x (C - E) (which is "left").
-				// Then, "up" is (0, 0, 1).
-				Vector Vup = new Vector(0, 0, 1);
-				Vector Vleft = Vup.cross(camera.center.subtract(camera.eye)).normalized();
-				
-				// Calculate the light position and convert to float array.
-				// Light position = E + Vleft + Vup.
-				Vector cameralightPosition = camera.eye.add(Vleft.scale(0.1)).add(Vup.scale(0.1));
-				float[] fCameralightPosition = {
-					(float)cameralightPosition.x(),
-					(float)cameralightPosition.y(),
-					(float)cameralightPosition.z()
-				};
-				
-				// Calculate the light direction. This is simply C - E.
-				float[] fCameralightDirection = {
-					(float)camera.center.subtract(camera.eye).scale(50).x(),
-					(float)camera.center.subtract(camera.eye).scale(50).y(),
-					(float)camera.center.subtract(camera.eye).scale(50).z(),
-					1f
-				};
-				
-				// Now create a spotlight which starts at the camera light position
-				// and goes in the direction of C - E with an angle of 60 degrees.
-				float[] lightSpecular = {0.6f, 0.6f, 0.6f, 0.6f};
-				float[] lightDiffuse = {1f, 1f, 1f, 0.5f};
-				gl.glLightfv(GL_LIGHT1, GL_SPECULAR, lightSpecular, 0);
-				gl.glLightfv(GL_LIGHT1, GL_DIFFUSE, lightDiffuse, 0);
-				gl.glLightfv(GL_LIGHT1, GL_POSITION, fCameralightPosition, 0);
-				gl.glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 60f);
-				gl.glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 100f);
-				gl.glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, fCameralightDirection, 0);
-				gl.glEnable(GL_LIGHT1);
         
         //
         // Draw a horizontal line through the center point with width gs.vWidth and through
@@ -330,25 +322,20 @@ public class RobotRace extends Base {
         gl.glVertex3d(G.x(), G.y(), G.z());
         gl.glEnd();
         gl.glLineWidth(1);
-				
-				// This is an orange sphere in the origin for shadow testing purposes
-				/*
-				applyMaterial(Material.ORANGE);
-				glut.glutSolidSphere(0.5, 30, 30);
-				applyMaterial(Material.BLACK);
-				glut.glutWireSphere(0.51, 30, 30);
-				* */
         
         // Draw the robots
-				gl.glPushMatrix();
-        robots[0].draw(false);
-				gl.glTranslatef(1f, 0f, 0f);
-				robots[1].draw(false);
-				gl.glTranslatef(1f, 0f, 0f);
-				robots[2].draw(false);
-				gl.glTranslatef(1f, 0f, 0f);
-				robots[3].draw(false);
-				gl.glPopMatrix();
+		gl.glPushMatrix();
+        robots[0].draw(gs.showStick);
+		gl.glTranslatef(1f, 0f, 0f);
+		robots[1].draw(gs.showStick);
+		gl.glTranslatef(1f, 0f, 0f);
+		robots[2].draw(gs.showStick);
+		gl.glTranslatef(1f, 0f, 0f);
+		robots[3].draw(gs.showStick);
+		gl.glPopMatrix();
+
+        // Reset the color
+        applyMaterial(Material.BLACK);
         
         // Draw race track
         raceTrack.draw(gs.trackNr);
@@ -367,7 +354,7 @@ public class RobotRace extends Base {
         float cubeSize = 1f;
 
         // Set the radius of the sphere
-        float sphereRadius = 0.2f * cubeSize;
+        float sphereRadius = 0.1f * cubeSize;
         
         // Set the base and height of the cones
         float coneBase = 0.1f * cubeSize;
@@ -384,11 +371,11 @@ public class RobotRace extends Base {
         
         // Draw the yellow sphere at (0, 0, 0)
         // First, set the color of the sphere
-        gl.glColor3f(1f, 1f, 0f);
+        applyMaterial(Material.YELLOW);
         // Then, draw the sphere
-        glut.glutSolidSphere(sphereRadius, 20, 20);
+        glut.glutSolidSphere(sphereRadius, 30, 30);
         // Reset the color to black
-        gl.glColor3f(0f, 0f, 0f);
+        applyMaterial(Material.BLACK);
         
         // The cones need first to be rotated when they are at the origin.
         // After the rotation, a translation is needed. So let V be the
@@ -400,7 +387,7 @@ public class RobotRace extends Base {
         
         // Draw the red cone at (1, 0, 0)
         // Set the color for the x-axis cone (red)
-        gl.glColor3f(1f, 0f, 0f);
+        applyMaterial(Material.RED);
         // Translate to (1, 0, 0)
         gl.glTranslatef(1f * cubeSize, 0f, 0f);
         // Now rotate over the y-axis
@@ -414,7 +401,7 @@ public class RobotRace extends Base {
         
         // Draw the green cone at (0, 1, 0)
         // Set the color for the y-axis cone (green)
-        gl.glColor3f(0f, 1f, 0f);
+        applyMaterial(Material.GREEN);
         // Translate to (0, 1, 0)
         gl.glTranslatef(0f, 1f * cubeSize, 0f);
         // Now rotate over the x-axis
@@ -428,7 +415,7 @@ public class RobotRace extends Base {
         
         // Draw the blue cone at (0, 0, 1)
         // Set the color for the z-axis cone (blue)
-        gl.glColor3f(0f, 0f, 1f);
+        applyMaterial(Material.BLUE);
         // Translate to (0, 0, 1)
         gl.glTranslatef(0f, 0f, 1f * cubeSize);
         // Draw the cone
@@ -437,7 +424,7 @@ public class RobotRace extends Base {
         gl.glTranslatef(0f, 0f, -1f * cubeSize);
         
         // Reset the color
-        gl.glColor3f(0f, 0f, 0f);
+        applyMaterial(Material.BLACK);
     }
     
     /**
@@ -445,12 +432,14 @@ public class RobotRace extends Base {
      */
     public enum Material {
 			
-				/**
-				 * Black material for testing purposes.
-				 */
-				BLACK (
+		/**
+		 * Black material for testing purposes.
+		 */
+		BLACK (
             new float[] {0f, 0f, 0f, 0f},
-            new float[] {0f, 0f, 0f, 0f}),
+            new float[] {0f, 0f, 0f, 0f},
+            new float[] {0f, 0f, 0f, 0f},
+            0f),
         
         /** 
          * Gold material properties.
@@ -458,7 +447,9 @@ public class RobotRace extends Base {
          */
         GOLD (
             new float[] {0.75164f, 0.60648f, 0.22648f, 1.0f},
-            new float[] {0.628281f, 0.555802f, 0.366065f, 1.0f}),
+            new float[] {0.628281f, 0.555802f, 0.366065f, 1.0f},
+            new float[] {0.24725f, 0.1995f, 0.0745f, 1f},
+            4f),
         
         /**
          * Silver material properties.
@@ -466,36 +457,90 @@ public class RobotRace extends Base {
          */
         SILVER (
             new float[] {0.50754f, 0.50754f, 0.50754f, 1.0f},
-            new float[] {0.508273f, 0.508273f, 0.508273f, 1.0f}),
+            new float[] {0.508273f, 0.508273f, 0.508273f, 1.0f},
+            new float[] {0.19225f, 0.19225f, 0.19225f, 1f},
+            4f),
         
         /** 
          * Wood material properties.
          * Modify the default values to make it look like wood.
          */
         WOOD (
-            new float[] {0.1f, 0.1f, 0.1f, 1.0f},
-            new float[] {0.3f, 0.1f, 0.1f, 1.0f}),
+            new float[] {1.0f, 1.0f, 1.0f, 1.0f},
+            new float[] {0.3f, 0.1f, 0.1f, 1.0f},
+            new float[] {0.3f, 0.106f, 0f, 1.0f},
+            3f),
         
         /**
          * Orange material properties.
          * Modify the default values to make it look like orange.
          */
         ORANGE (
-            new float[] {0.8f, 0.8f, 0.8f, 1.0f},
-            new float[] {1f, 0.6f, 0.0f, 1.0f});
+            new float[] {1.0f, 1.0f, 1.0f, 1.0f},
+            new float[] {1.0f, 0.6f, 0.0f, 1.0f},
+            new float[] {0.25f, 0.25f, 0.25f, 1.0f},
+            1f),
+
+        /**
+         * Red material properties.
+         * Modify the default values to make it look like red.
+         */
+        RED (
+            new float[] {1.0f, 1.0f, 1.0f, 1.0f},
+            new float[] {1.0f, 0.0f, 0.0f, 1.0f},
+            new float[] {0f, 0f, 0f, 1f},
+            0f),
+
+        /**
+         * BLUE material properties.
+         * Modify the default values to make it look like BLUE.
+         */
+        BLUE (
+            new float[] {1.0f, 1.0f, 1.0f, 1.0f},
+            new float[] {0.0f, 0.0f, 1.0f, 1.0f},
+            new float[] {0f, 0f, 0f, 1f},
+            0f),
+
+        /**
+         * GREEN material properties.
+         * Modify the default values to make it look like GREEN.
+         */
+        GREEN (
+            new float[] {1.0f, 1.0f, 1.0f, 1.0f},
+            new float[] {0.0f, 1.0f, 0.0f, 1.0f},
+            new float[] {0f, 0f, 0f, 1f},
+            0f),
+
+        /**
+         * YELLOW material properties.
+         * Modify the default values to make it look like YELLOW.
+         */
+        YELLOW (
+            new float[] {1.0f, 1.0f, 1.0f, 1.0f},
+            new float[] {1.0f, 1.0f, 0.0f, 1.0f},
+            new float[] {0f, 0f, 0f, 1f},
+            0f);
         
         /** The diffuse RGBA reflectance of the material. */
         public float[] diffuse;
         
         /** The specular RGBA reflectance of the material. */
         public float[] specular;
+
+        /** The ambient RGBA reflectance of the material. **/
+        public float[] ambient;
+
+        /** The shininess reflectance of the material. **/
+        public float shininess;
         
         /**
          * Constructs a new material with diffuse and specular properties.
          */
-        private Material(float[] diffuse, float[] specular) {
+        private Material(float[] diffuse, float[] specular, float[] ambient, float shininess) {
             this.diffuse = diffuse;
             this.specular = specular;
+            this.ambient = ambient;
+            this.shininess = shininess;
         }
     }
     
@@ -506,11 +551,11 @@ public class RobotRace extends Base {
 			
 				public double angleLUpperArm = 180.0;
 				public double angleLLowerArm = -0.0;
-				public double angleLHand = 0.0;
+				public double angleLHand = 90.0;
 				
 				public double angleRUpperArm = 180.0;
 				public double angleRLowerArm = -0.0;
-				public double angleRHand = -0.0;
+				public double angleRHand = 90.0;
 				
 				public double angleLUpperLeg = 0.0;
 				public double angleLLowerLeg = 0.0;
@@ -584,11 +629,11 @@ public class RobotRace extends Base {
 						gl.glEnd();
 					} else {
 						// Neck
-						glut.glutSolidCylinder(0.05f, 0.1f + 0.15f / 2.0f, 20, 20);
+						glut.glutSolidCylinder(0.05f, 0.1f + 0.15f / 2.0f, 30, 30);
 						
 						// Head
 						gl.glTranslatef(0f, 0f, 0.1f + 0.15f);
-						glut.glutSolidSphere(0.15f, 20, 20);
+						glut.glutSolidSphere(0.15f, 100, 100);
 						gl.glTranslatef(0f, 0f, -0.1f - 0.15f);
 					}
 				}
@@ -740,6 +785,39 @@ public class RobotRace extends Base {
          */
         public void update(int mode) {
             robots[0].toString();
+
+            //
+            // Define C as center point (given by gs.cnt).
+            // Let E be the eye point and V=E-C (a vector from C to E).
+            // Then E=C+V.
+            //
+            // Given: |V| (gs.vDist), φ (gs.phi), θ (gs.theta) with:
+            //    |V|:  Lenth of vector V.
+            //    φ:    Angle between positive X-axis and V projected on the XY-plane.
+            //    θ:    Angle between V and V projected on the XY-plane.
+            //
+            // Now we can calculate V = (x, y, z):
+            //    z = |V| * sin(φ)
+            //    
+            // Let V' be V projected on the XY-plane. Then:
+            //    |V'| = |V| * cos(φ)
+            //
+            // From this we get:
+            //     x = |V'| * cos(θ)
+            //     y = |V'| * sin(θ)
+            //
+            // Thus:
+            //     V = (x, y, z) = (|V|cos(θ)cos(φ), |V|sin(θ)cos(φ), |V|sin(φ))
+                
+            Vector V = new Vector(
+                gs.vDist * Math.cos(gs.theta) * Math.cos(gs.phi),
+                gs.vDist * Math.sin(gs.theta) * Math.cos(gs.phi),
+                gs.vDist * Math.sin(gs.phi)
+            );
+            
+            // Thus, eye point E = C + V
+            this.eye = gs.cnt.add(V);
+            this.center = gs.cnt;
             
             // Helicopter mode
             if (1 == mode) {  
@@ -755,9 +833,7 @@ public class RobotRace extends Base {
                 
             // Auto mode
             } else if (4 == mode) { 
-                // code goes here...
-                
-            // Default mode
+
             } else {
                 setDefaultMode();
             }
@@ -768,7 +844,15 @@ public class RobotRace extends Base {
          * on the camera's default mode.
          */
         private void setDefaultMode() {
-            // code goes here ...
+            setTopMode();
+        }
+
+        /**
+         * View from top (fixed). Computes {@code eye}, {@code center} and {@code up}.
+         */
+        private void setTopMode() {
+            this.eye = new Vector(0, 0, gs.phi * 100);
+            this.center = new Vector(1, 1, 1);
         }
         
         /**
@@ -813,54 +897,546 @@ public class RobotRace extends Base {
         
         /** Array with control points for the custom track. */
         private Vector[] controlPointsCustomTrack;
+
+        /** Size of the tracks */
+        private double trackSize = 4.0;
         
         /**
          * Constructs the race track, sets up display lists.
          */
         public RaceTrack() {
-            // code goes here ...
+            initOTrack(20, 20);
+            initLTrack(15, 20);
+            initCTrack(20, 20);
+            initCustomTrack(20, 20);
+        }
+
+        /**
+         * Initialize the control points of the custom track (8-shape).
+         * 
+         * @param width  Maximum width (x-value) of the figure.
+         * @param height Maximum height (y-value) of the figure.
+         */
+        private void initCustomTrack(double width, double height) {
+            double halfTrackSize = trackSize / 2.0;
+
+            controlPointsCustomTrack = new Vector[13];
+            controlPointsCustomTrack[0] = new Vector(0.5 * width, 0.5 * height, 0);
+            controlPointsCustomTrack[1] = new Vector(halfTrackSize, 0.5 * height, 0);
+            controlPointsCustomTrack[2] = new Vector(halfTrackSize, height, 0);
+            controlPointsCustomTrack[3] = new Vector(0.5 * width, height - halfTrackSize, 0);
+
+            controlPointsCustomTrack[4] = new Vector(width - halfTrackSize, height, 0);
+            controlPointsCustomTrack[5] = new Vector(width - halfTrackSize, 0.5 * height, 0);
+            controlPointsCustomTrack[6] = new Vector(0.5 * width, 0.5 * height, 0);
+
+            // Symmetry
+            controlPointsCustomTrack[7] = new Vector(width - halfTrackSize, height - 0.5 * height, 0);
+            controlPointsCustomTrack[8] = new Vector(width - halfTrackSize, height - height, 0);
+
+            controlPointsCustomTrack[9] = new Vector(0.5 * width, height - (height - halfTrackSize), 0);
+            controlPointsCustomTrack[10] = new Vector(halfTrackSize, height - height, 0);
+            controlPointsCustomTrack[11] = new Vector(halfTrackSize, height - 0.5 * height, 0);
+
+            controlPointsCustomTrack[12] = new Vector(0.5 * width, height - 0.5 * height, 0);
+        }
+
+        /**
+         * Initialize the control points of the C track.
+         * 
+         * @param width  Maximum width (x-value) of the figure.
+         * @param height Maximum height (y-value) of the figure.
+         */
+        private void initCTrack(double width, double height) {
+            // Half the size of the track
+            double halfTrackSize = trackSize / 2.0;
+
+            // The size between two lanes
+            double size = 2.5;
+
+            // Radius for turnarounds
+            double radius = 0.1;
+
+            // Initialize the control points
+            controlPointsCTrack = new Vector[31];
+
+            // Mid-left points
+            controlPointsCTrack[0] = new Vector(0, 0.5 * height, 0);
+            controlPointsCTrack[1] = new Vector(0, 0.5 * (0.5 * height), 0);
+            controlPointsCTrack[2] = new Vector(0.5 * (0.5 * width), 0, 0);
+            controlPointsCTrack[3] = new Vector(0.5 * width, 0, 0);
+
+            // Bottom point
+            controlPointsCTrack[4] = new Vector(0.5 * width + 0.25 * width, 0, 0);
+            controlPointsCTrack[5] = new Vector(width, 0.5 * (0.25 * height), 0);
+            controlPointsCTrack[6] = new Vector(width, 0.25 * height, 0);
+
+            // Right point
+            controlPointsCTrack[7] = new Vector(width, (radius + 0.25) * height, 0);
+            controlPointsCTrack[8] = new Vector(width - size, (radius + 0.25) * height, 0);
+            controlPointsCTrack[9] = new Vector(width - size, 0.25 * height, 0);
+
+            // Mid corner point
+            controlPointsCTrack[10] = new Vector(width - size, 0.5 * (0.25 * height) + size, 0);
+            controlPointsCTrack[11] = new Vector(0.5 * width + 0.25 * width - size, size, 0);
+            controlPointsCTrack[12] = new Vector(0.5 * width, size, 0);
+
+            // Left corner point
+            controlPointsCTrack[13] = new Vector(0.5 * (0.5 * width) + size, size, 0);
+            controlPointsCTrack[14] = new Vector(size, 0.5 * (0.5 * height) + size, 0);
+            controlPointsCTrack[15] = new Vector(size, 0.5 * height, 0);
+
+            // Symmetry (top)
+            controlPointsCTrack[16] = new Vector(size, height - (0.5 * (0.5 * height) + size), 0);
+            controlPointsCTrack[17] = new Vector(0.5 * (0.5 * width) + size, height - size, 0);
+
+            // Left (top) corner point
+            controlPointsCTrack[18] = new Vector(0.5 * width, height - size, 0);
+            controlPointsCTrack[19] = new Vector(0.5 * width + 0.25 * width - size, height - size, 0);
+            controlPointsCTrack[20] = new Vector(width - size, height - (0.5 * (0.25 * height) + size), 0);
+
+            // Mid (top) corner point
+            controlPointsCTrack[21] = new Vector(width - size, height - 0.25 * height, 0);
+            controlPointsCTrack[22] = new Vector(width - size, height - (radius + 0.25) * height, 0);
+            controlPointsCTrack[23] = new Vector(width, height - (radius + 0.25) * height, 0);
+
+            // Right (top) point
+            controlPointsCTrack[24] = new Vector(width, height - 0.25 * height, 0);
+            controlPointsCTrack[25] = new Vector(width, height - 0.5 * (0.25 * height), 0);
+            controlPointsCTrack[26] = new Vector(0.5 * width + 0.25 * width, height, 0);
+
+            // Top point
+            controlPointsCTrack[27] = new Vector(0.5 * width, height, 0);
+            controlPointsCTrack[28] = new Vector(0.5 * (0.5 * width), height, 0);
+            controlPointsCTrack[29] = new Vector(0, height - 0.5 * (0.5 * height), 0);
+
+            // Left point
+            controlPointsCTrack[30] = new Vector(0, 0.5 * height, 0);
+
+            // Lay all points half size of the tracks from the border
+            for (int i = 0; i < controlPointsCTrack.length; i++) {
+                double x = controlPointsCTrack[i].x();
+                double y = controlPointsCTrack[i].y();
+                double z = controlPointsCTrack[i].z();
+                if (x > 0.5 * width) {
+                    x = x - halfTrackSize;
+                } else if (x < 0.5 * width) {
+                    x = x + halfTrackSize;
+                }
+                if (y > 0.5 * height) {
+                    y = y - halfTrackSize;
+                } else if (y < 0.5 * height) {
+                    y = y + halfTrackSize;
+                }
+                controlPointsCTrack[i] = new Vector(x, y, z);
+            }
+            
+        }
+
+        /**
+         * Initialize the control points of the L track.
+         * 
+         * @param width  Maximum width (x-value) of the figure.
+         * @param height Maximum height (y-value) of the figure.
+         */
+        private void initLTrack(double width, double height) {
+            // Size between two lanes
+            double size = 0.01 * (width + height) / 2.0;
+
+            // Radius for turnaround point
+            double radius = 0.2 * (width + height) / 2.0;
+
+            // Half the size of the track
+            double halfTrackSize = trackSize / 2.0;
+
+            controlPointsLTrack = new Vector[31];
+
+            // Initialize all control points
+            controlPointsLTrack[0] = new Vector(halfTrackSize, halfTrackSize + radius, 0);
+            controlPointsLTrack[1] = new Vector(halfTrackSize, halfTrackSize, 0);
+            controlPointsLTrack[2] = new Vector(halfTrackSize, halfTrackSize, 0);
+            controlPointsLTrack[3] = new Vector(halfTrackSize + radius, halfTrackSize, 0);
+
+            controlPointsLTrack[4] = new Vector(halfTrackSize + radius, halfTrackSize, 0);
+            controlPointsLTrack[5] = new Vector(halfTrackSize + radius, halfTrackSize, 0);
+            controlPointsLTrack[6] = new Vector(width - radius - halfTrackSize, halfTrackSize, 0);
+            
+            controlPointsLTrack[7] = new Vector(width - halfTrackSize, halfTrackSize, 0);
+            controlPointsLTrack[8] = new Vector(width - halfTrackSize, halfTrackSize, 0);
+            controlPointsLTrack[9] = new Vector(width - halfTrackSize, size / 2.0 + 2 * halfTrackSize, 0);
+
+            controlPointsLTrack[10] = new Vector(width - halfTrackSize, size + 3 * halfTrackSize, 0);
+            controlPointsLTrack[11] = new Vector(width - halfTrackSize, size + 3 * halfTrackSize, 0);
+            controlPointsLTrack[12] = new Vector(width - radius - halfTrackSize, size + 3 * halfTrackSize, 0);
+
+            controlPointsLTrack[13] = new Vector(width - radius - halfTrackSize, size + 3 * halfTrackSize, 0);
+            controlPointsLTrack[14] = new Vector(width - radius - halfTrackSize, size + 3 * halfTrackSize, 0);
+            controlPointsLTrack[15] = new Vector(size + radius + 3 * halfTrackSize, size + 3 * halfTrackSize, 0);
+
+            controlPointsLTrack[16] = new Vector(size + 3 * halfTrackSize, size + 3 * halfTrackSize, 0);
+            controlPointsLTrack[17] = new Vector(size + 3 * halfTrackSize, size + 3 * halfTrackSize, 0);
+            controlPointsLTrack[18] = new Vector(size + 3 * halfTrackSize, size + 3 * halfTrackSize + radius, 0);
+
+            controlPointsLTrack[19] = new Vector(size + 3 * halfTrackSize, size + radius + 3 * halfTrackSize, 0);
+            controlPointsLTrack[20] = new Vector(size + 3 * halfTrackSize, size + radius + 3 * halfTrackSize, 0);
+            controlPointsLTrack[21] = new Vector(size + 3 * halfTrackSize, height - radius - halfTrackSize, 0);
+
+            controlPointsLTrack[22] = new Vector(size + 3 * halfTrackSize, height - halfTrackSize, 0);
+            controlPointsLTrack[23] = new Vector(size + 3 * halfTrackSize, height - halfTrackSize, 0);
+            controlPointsLTrack[24] = new Vector(size / 2.0 + 2 * halfTrackSize, height - halfTrackSize, 0);
+
+            controlPointsLTrack[25] = new Vector(halfTrackSize, height - halfTrackSize, 0);
+            controlPointsLTrack[26] = new Vector(halfTrackSize, height - halfTrackSize, 0);
+            controlPointsLTrack[27] = new Vector(halfTrackSize, height - halfTrackSize - radius, 0);
+
+            controlPointsLTrack[28] = new Vector(halfTrackSize, height - halfTrackSize - radius, 0);
+            controlPointsLTrack[29] = new Vector(halfTrackSize, height - halfTrackSize - radius, 0);
+            controlPointsLTrack[30] = new Vector(halfTrackSize, halfTrackSize + radius, 0);
+        }
+
+        /**
+         * Initialize the control points of the O track.
+         * 
+         * @param width  Maximum width (x-value) of the figure.
+         * @param height Maximum height (y-value) of the figure.
+         */
+        private void initOTrack(double width, double height) {
+            // Initialize all control points
+            controlPointsOTrack = new Vector[13];
+            controlPointsOTrack[0] = new Vector(trackSize / 2.0, 0.5 * height, 0);
+
+            controlPointsOTrack[1] = new Vector(trackSize / 2.0, 0.25 * height, 0);
+            controlPointsOTrack[2] = new Vector(0.25 * width, trackSize / 2.0, 0);
+
+            controlPointsOTrack[3] = new Vector(0.5 * width, trackSize / 2.0, 0);
+
+            controlPointsOTrack[4] = new Vector(0.75 * width, trackSize / 2.0, 0);
+            controlPointsOTrack[5] = new Vector(width - trackSize / 2.0, 0.25 * height, 0);
+
+            controlPointsOTrack[6] = new Vector(width - trackSize / 2.0, 0.5 * height, 0);
+
+            controlPointsOTrack[7] = new Vector(width - trackSize / 2.0, 0.75 * height, 0);
+            controlPointsOTrack[8] = new Vector(0.75 * width, height - trackSize / 2.0, 0);
+
+            controlPointsOTrack[9] = new Vector(0.5 * width, height - trackSize / 2.0, 0);
+
+            controlPointsOTrack[10] = new Vector(0.25 * width, height - trackSize / 2.0, 0);
+            controlPointsOTrack[11] = new Vector(trackSize / 2.0, 0.75 * height, 0);
+
+            controlPointsOTrack[12] = new Vector(trackSize / 2.0, 0.5 * height, 0);
+            
+        }
+
+        /**
+         * Calculate {@code n} faculty.
+         * 
+         * @param  n
+         * @return n!
+         */
+        public double faculty(double n) {
+            if (n == 0) {
+                return 1;
+            }
+            return n * faculty(n - 1);
+        }
+
+        /**
+         * Calculate binomial coefficients.
+         * 
+         * @param  n
+         * @param  k
+         * @return n! / (k! (n - k)!)
+         */
+        public double binomial(double n, double k) {
+            return faculty(n) / (faculty(k) * faculty(n - k));
+        }
+
+        /**
+         * Calculate a cubic bezier curve.
+         * 
+         * @param  t
+         * @return
+         */
+        public Vector BezierCurve(double t, Vector[] controlPoints) {
+            Vector sum = new Vector(0, 0, 0);
+            int n = controlPoints.length - 1;
+            for (int i = 0; i <= n; i++) {
+                sum = sum.add(controlPoints[i].scale(BernsteinPolynomial(i, n, t)));
+            }
+            return sum;
+        }
+
+        /**
+         * Calculate the derivative of a Bezier curve.
+         * 
+         * @param  t              
+         * @param  controlPoints Control points for the curve
+         * @return Tangent at point t
+         */
+        public Vector BezierCurveTangent(double t, Vector[] controlPoints) {
+            Vector sum = new Vector(0, 0, 0);
+            int n = controlPoints.length - 1;
+            for (int i = 0; i <= n - 1; i++) {
+                sum = sum.add(controlPoints[i + 1].subtract(controlPoints[i]).scale(n * BernsteinPolynomial(i, n - 1, t)));
+            }
+            return sum;
+        }
+
+        /**
+         * Get a point at a cubic Bezier curve.
+         * 
+         * @param  t  Parameter in [0, 1].
+         * @param  P0 First point.
+         * @param  P1 First control point.
+         * @param  P2 Second control point.
+         * @param  P3 Second point.
+         * @return Bezier curve at parameter t.
+         */
+        public Vector getCubicBezierPoint(double t, Vector P0, Vector P1, Vector P2, Vector P3) {
+            Vector[] vectors = new Vector[4];
+            vectors[0] = P0;
+            vectors[1] = P1;
+            vectors[2] = P2;
+            vectors[3] = P3;
+            return BezierCurve(t, vectors);
+        }
+
+        /**
+         * Get the value of a Bernstein polynomial.
+         * 
+         * @param  i Parameter.
+         * @param  n Parameter.
+         * @param  t Parameter.
+         * @return   Value of the Bernstein polynomial at point t.
+         */
+        public double BernsteinPolynomial(int i, int n, double t) {
+            return binomial(n, i) * Math.pow(t, i) * Math.pow(1 - t, n - i);
+        }
+
+        /**
+         * Draw a curve given some control points.
+         * 
+         * @param controlPoints Controlpoints for the curve to draw.
+         */
+        public void drawCurve(Vector[] controlPoints) {
+            // Precision
+            int steps = 400;
+
+            // Loop through the steps
+            for (int i = 0; i < steps; i++) {
+                // Calculate first and next point
+                double t1 = (float)i / (float)steps;
+                double t2 = (float)(i + 1) / (float)steps;
+                Vector V1 = getCurvePoint(t1, controlPoints);
+                Vector V2 = getCurvePoint(t2, controlPoints);
+
+                // Draw them
+                gl.glBegin(GL_LINES);
+                gl.glVertex3d(V1.x(), V1.y(), V1.z());
+                gl.glVertex3d(V2.x(), V2.y(), V2.z());
+                gl.glEnd();
+            }
+        }
+
+        /**
+         * Draw the path given some control points.
+         * 
+         * @param controlPoints Controlpoints for the curve to draw.
+         */
+        public void drawPath(Vector[] controlPoints) {
+            // Precision
+            int steps = 400;
+
+            // (Base) calculate some vectors
+            Vector V1 = getCurvePoint(0, controlPoints);
+            Vector Q1 = new Vector(0, 0, 0);
+            Vector Q3 = new Vector(0, 0, 0);
+            Vector Q5 = new Vector(0, 0, 0);
+            Vector Q7 = new Vector(0, 0, 0);
+
+            // Loop through all points. Skip the first point to calculate the next points.
+            // The first point is drawn when i == steps.
+            for (int i = 0; i <= steps; i++) {
+                double t1 = (float)i / (float)steps % 1;
+                double t2 = (float)(i + 1) / (float)steps % 1;
+
+                // Calculate mid point
+                Vector V2 = getCurvePoint(t2, controlPoints);
+
+                // Calculate directions
+                Vector up = new Vector(0, 0, 1);
+                Vector down = up.scale(-1);
+                Vector forward = V2.subtract(V1);
+                Vector left = forward.cross(up).normalized().scale(2);
+                Vector right = left.scale(-1);
+
+                // Calculate side points
+                Vector Q0 = V1.add(left).subtract(up);
+                Vector Q2 = Q0.add(up);
+                Vector Q4 = Q2.add(right).add(right);
+                Vector Q6 = Q4.add(down);
+
+                // Draw when not base case
+                if (i > 0) {
+                    applyMaterial(Material.ORANGE);
+                    gl.glBegin(GL_QUAD_STRIP);
+                    gl.glVertex3d(Q0.x(), Q0.y(), Q0.z());
+                    gl.glVertex3d(Q1.x(), Q1.y(), Q1.z());
+                    gl.glVertex3d(Q2.x(), Q2.y(), Q2.z());
+                    gl.glVertex3d(Q3.x(), Q3.y(), Q3.z());
+                    gl.glVertex3d(Q4.x(), Q4.y(), Q4.z());
+                    gl.glVertex3d(Q5.x(), Q5.y(), Q5.z());
+                    gl.glVertex3d(Q6.x(), Q6.y(), Q6.z());
+                    gl.glVertex3d(Q7.x(), Q7.y(), Q7.z());
+                    gl.glVertex3d(Q0.x(), Q0.y(), Q0.z());
+                    gl.glVertex3d(Q1.x(), Q1.y(), Q1.z());
+                    gl.glEnd();
+                }
+
+                // Next points are previous points
+                V1 = V2;
+                Q1 = Q0;
+                Q3 = Q2;
+                Q5 = Q4;
+                Q7 = Q6;
+            }
         }
         
         /**
          * Draws this track, based on the selected track number.
          */
-        public void draw(int trackNr) {
-            
+        public void draw(int trackNr) { 
             // The test track is selected
             if (0 == trackNr) {
-                // code goes here ...
-            
+                int steps = 200;
+                for (int i = 0; i < steps; i++) {
+                    double t1 = (float)i / (float)steps;
+                    double t2 = (float)(i + 1) / (float)steps;
+                    Vector V1 = getPoint(t1);
+                    Vector V2 = getPoint(t2);
+                    gl.glBegin(GL_LINES);
+                    gl.glVertex3d(V1.x(), V1.y(), V1.z());
+                    gl.glVertex3d(V2.x(), V2.y(), V2.z());
+                    gl.glEnd();   
+                }
             // The O-track is selected
             } else if (1 == trackNr) {
-                // code goes here ...
-                
+                drawPath(controlPointsOTrack);
             // The L-track is selected
             } else if (2 == trackNr) {
-                // code goes here ...
-                
+                drawPath(controlPointsLTrack);
             // The C-track is selected
             } else if (3 == trackNr) {
-                // code goes here ...
-                
-            // The custom track is selected
+                drawPath(controlPointsCTrack);
+            // The custom track is selected (8-track)
             } else if (4 == trackNr) {
-                // code goes here ...
-                
+                drawPath(controlPointsCustomTrack);
             }
+        }
+
+        /**
+         * Get the relative time in a segment.
+         * 
+         * @param  t             Global time.
+         * @param  controlPoints All control points.
+         * @return               Relative time in a segment.
+         */
+        public double getSegmentTime(double t, Vector[] controlPoints) {
+            // Bring t back in interval [0, 1)
+            t = t % 1;
+
+             // Calculate # segments
+            double segmentCount = (controlPoints.length - 1) / 3.0;
+
+            // Calculate in which segment the t falls
+            int segment = (int)(t * segmentCount) % (int)segmentCount;
+
+            // Calculate relative t
+            double tRel = t * segmentCount - segment;
+
+            return tRel;
+        }
+
+        /**
+         * Get all points of a segment.
+         *
+         * @param  t Global time.
+         * @param  controlPoints All control points.
+         * @return All points of the segment where the t is in.
+         */
+        public Vector[] getSegmentPoints(double t, Vector[] controlPoints) {
+            // Bring t back in interval [0, 1)
+            t = t % 1;
+
+            // Calculate # segments
+            double segmentCount = (controlPoints.length - 1) / 3.0;
+
+            // Calculate in which segment the t falls
+            int segment = (int)(t * segmentCount) % (int)segmentCount;
+
+            // Calculate relative t
+            double tRel = t * segmentCount - segment;
+
+            // Calculate the cubic Bezier curve points
+            Vector[] segmentPoints = new Vector[4];
+            segmentPoints[0] = controlPoints[3 * segment];
+            segmentPoints[1] = controlPoints[3 * segment + 1];
+            segmentPoints[2] = controlPoints[3 * segment + 2];
+            segmentPoints[3] = controlPoints[3 * segment + 3];
+
+            return segmentPoints;
+        }
+
+        /**
+         * Get a point at a curve.
+         * 
+         * @param  t             Parameter 0 <= {@code t} <= 1.
+         * @param  controlPoints Control points for the curve.
+         * @return               Point at curve (based on {@code controlPoints}) at time {@code t}.
+         */
+        public Vector getCurvePoint(double t, Vector[] controlPoints) {
+            Vector[] segmentPoints = getSegmentPoints(t, controlPoints);
+            return BezierCurve(getSegmentTime(t, controlPoints), segmentPoints);
+        }
+
+        /**
+         * Get the tangent at a curve.
+         * 
+         * @param  t             Parameter 0 <= {@code t} <= 1.
+         * @param  controlPoints Control points for the curve.
+         * @return               Tangent at curve (based on {@code controlPoints}) at time {@code t}.
+         */
+        public Vector getCurveTangent(double t, Vector[] controlPoints) {
+            Vector[] segmentPoints = getSegmentPoints(t, controlPoints);
+            return BezierCurveTangent(getSegmentTime(t, controlPoints), segmentPoints).normalized().scale(3);
         }
         
         /**
          * Returns the position of the curve at 0 <= {@code t} <= 1.
          */
         public Vector getPoint(double t) {
-            return Vector.O; // <- code goes here
+            // P(t) = (10 cos(2 Pi t), 14 sin(2 Pi t), 1)
+            Vector P = new Vector(
+                10 * Math.cos(2 * Math.PI * t),
+                14 * Math.sin(2 * Math.PI * t),
+                0
+            );
+            
+            return P;
         }
         
         /**
          * Returns the tangent of the curve at 0 <= {@code t} <= 1.
          */
         public Vector getTangent(double t) {
-            return Vector.O; // <- code goes here
+            // T(t) = P'(t) = (- 10 * 2 * Pi * sin(2 Pi t), 14 * 2 * Pi * cos(2 Pi t), 0)
+            Vector T = new Vector(
+                -10 * 2 * Math.PI * Math.sin(2 * Math.PI * t),
+                14 * 2 * Math.PI * Math.cos(2 * Math.PI * t),
+                0
+            );
+
+            return T;
         }
         
     }
